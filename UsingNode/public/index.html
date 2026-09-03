@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>ChatVerse</title>
+
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+    <div class="background">
+        <div class="orb orb-one"></div>
+        <div class="orb orb-two"></div>
+        <div class="orb orb-three"></div>
+    </div>
+
+    <main class="app">
+        <header class="header">
+            <div>
+                <p class="eyebrow">RAW NODE.JS</p>
+                <h1>ChatVerse</h1>
+                <p class="subtitle">
+                    Real-time communication from the ground up.
+                </p>
+            </div>
+
+            <div class="status">
+                <span class="status-dot"></span>
+                <span>Disconnected</span>
+            </div>
+        </header>
+
+        <section class="chat-layout">
+
+            <div class="chat-card">
+
+                <div class="messages" id="messages">
+                    <div class="welcome">
+                        <div class="welcome-icon">✦</div>
+
+                        <h2>Welcome to ChatVerse</h2>
+
+                        <p>
+                            Your Node.js chat server is coming to life.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="message-area">
+                    <input
+                        id="messageInput"
+                        type="text"
+                        placeholder="Type a message..."
+                        autocomplete="off"
+                    >
+
+                    <button id="sendButton">
+                        Send
+                    </button>
+                </div>
+
+            </div>
+
+            <aside class="users-card">
+
+                <div class="users-header">
+                    <div>
+                        <p class="eyebrow">COMMUNITY</p>
+                        <h2>Online Users</h2>
+                    </div>
+
+                    <span class="user-count" id="userCount">0</span>
+                </div>
+
+                <div class="users-list" id="usersList">
+                    <p class="empty-users">
+                        No users connected
+                    </p>
+                </div>
+
+            </aside>
+
+        </section>
+
+        <section class="username-card">
+
+            <div>
+                <p class="eyebrow">IDENTITY</p>
+                <h2>Choose your username</h2>
+                <p>
+                    This will identify you in the conversation.
+                </p>
+            </div>
+
+            <div class="username-form">
+                <input
+                    id="usernameInput"
+                    type="text"
+                    placeholder="Enter username"
+                    autocomplete="off"
+                >
+
+                <button id="joinButton">
+                    Join Chat
+                </button>
+            </div>
+
+        </section>
+
+        <footer>
+            <span>Built with Node.js</span>
+            <span>•</span>
+            <span>No frameworks</span>
+            <span>•</span>
+            <span>No libraries</span>
+        </footer>
+
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>
