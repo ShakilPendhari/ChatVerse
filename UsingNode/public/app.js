@@ -33,3 +33,22 @@ messageInput.addEventListener("keydown", (event) => {
         sendButton.click();
     }
 });
+
+function callWebsocket() {
+    const ws = new WebSocket("ws://localhost:8000");
+    ws.onopen = () => {
+        console.log("WebSocket connected");
+        // // 1 byte payload
+        // ws.send("A");
+
+        // // 2 byte payload
+        // ws.send("AB")
+
+        // 126 byte payload
+        ws.send("A".repeat(700000))
+
+        //
+        // ws.send("A".repeat(65537))
+    };
+}
+callWebsocket();
