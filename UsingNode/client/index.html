@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Enterprise Chat Room</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <h3>Active Users</h3>
+            <ul id="userList"></ul>
+        </aside>
+        
+        <main class="chat-area">
+            <header class="header">
+                <h2>Group Room (#general)</h2>
+                <div id="connectionStatus" class="status">Disconnected</div>
+            </header>
+
+            <div class="join-bar">
+                <input type="text" id="usernameInput" placeholder="Enter display username..." />
+                <button id="joinButton">Join Chat</button>
+            </div>
+
+            <div id="chatWindow" class="chat-window"></div>
+
+            <footer class="input-bar">
+                <input type="text" id="messageInput" placeholder="Type message..." />
+                <button id="sendButton">Send</button>
+            </footer>
+        </main>
+    </div>
+
+    <script type="module" src="js/chat-app.js"></script>
+</body>
+</html>
