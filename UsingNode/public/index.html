@@ -1,124 +1,73 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>ChatVerse</title>
-
-    <link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8">
+  <title>Raw WebSocket Chat Client</title>
+  <style>
+    body { font-family: monospace; background: #121212; color: #00ff66; padding: 20px; }
+    #log { width: 100%; height: 300px; background: #000; border: 1px solid #00ff66; color: #00ff66; overflow-y: scroll; padding: 10px; }
+    input, button { background: #222; border: 1px solid #00ff66; color: #00ff66; padding: 8px; margin: 4px; }
+  </style>
 </head>
-
 <body>
-    <div class="background">
-        <div class="orb orb-one"></div>
-        <div class="orb orb-two"></div>
-        <div class="orb orb-three"></div>
-    </div>
+  <h2>Raw RFC 6455 Client Engine</h2>
+  <div>
+    <label>Token:</label>
+    <input type="text" id="token" value="token-user-1">
+    <label>Port:</label>
+    <input type="number" id="port" value="8000">
+    <button onclick="connect()">Connect</button>
+  </div>
+  <br>
+  <div id="log"></div>
+  <br>
+  <div>
+    <input type="text" id="recipient" placeholder="Recipient ID (e.g. U200)">
+    <input type="text" id="content" placeholder="Message content">
+    <button onclick="sendPrivate()">Send Private</button>
+  </div>
+  <div>
+    <input type="text" id="groupId" placeholder="Group ID (e.g. G10)">
+    <input type="text" id="groupContent" placeholder="Group Message content">
+    <button onclick="sendGroup()">Send Group</button>
+  </div>
 
-    <main class="app">
-        <header class="header">
-            <div>
-                <p class="eyebrow">RAW NODE.JS</p>
-                <h1>ChatVerse</h1>
-                <p class="subtitle">
-                    Real-time communication from the ground up.
-                </p>
-            </div>
+  <script>
+    let ws;
+    function log(txt) {
+      const el = document.getElementById('log');
+      el.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${txt}</div>`;
+      el.scrollTop = el.scrollHeight;
+    }
 
-            <div class="status">
-                <span class="status-dot"></span>
-                <span>Disconnected</span>
-            </div>
-        </header>
+    function connect() {
+      const token = document.getElementById('token').value;
+      const port = document.getElementById('port').value;
+      ws = new WebSocket(`ws://localhost:${port}/?token=${token}`);
 
-        <section class="chat-layout">
+      ws.onopen = () => log("CONNECTED_TO_NODE");
+      ws.onmessage = (e) => log("RECEIVED: " + e.data);
+      ws.onclose = () => log("DISCONNECTED");
+      ws.onerror = (e) => log("ERROR: " + JSON.stringify(e));
+    }
 
-            <div class="chat-card">
+    function sendPrivate() {
+      const recipientId = document.getElementById('recipient').value;
+      const content = document.getElementById('content').value;
+      ws.send(JSON.stringify({
+        action: 'send_private_message',
+        data: { recipientId, content }
+      }));
+    }
 
-                <div class="messages" id="messages">
-                    <div class="welcome">
-                        <div class="welcome-icon">✦</div>
-
-                        <h2>Welcome to ChatVerse</h2>
-
-                        <p>
-                            Your Node.js chat server is coming to life.
-                        </p>
-                    </div>
-                </div>
-
-                <div class="message-area">
-                    <input
-                        id="messageInput"
-                        type="text"
-                        placeholder="Type a message..."
-                        autocomplete="off"
-                    >
-
-                    <button id="sendButton">
-                        Send
-                    </button>
-                </div>
-
-            </div>
-
-            <aside class="users-card">
-
-                <div class="users-header">
-                    <div>
-                        <p class="eyebrow">COMMUNITY</p>
-                        <h2>Online Users</h2>
-                    </div>
-
-                    <span class="user-count" id="userCount">0</span>
-                </div>
-
-                <div class="users-list" id="usersList">
-                    <p class="empty-users">
-                        No users connected
-                    </p>
-                </div>
-
-            </aside>
-
-        </section>
-
-        <section class="username-card">
-
-            <div>
-                <p class="eyebrow">IDENTITY</p>
-                <h2>Choose your username</h2>
-                <p>
-                    This will identify you in the conversation.
-                </p>
-            </div>
-
-            <div class="username-form">
-                <input
-                    id="usernameInput"
-                    type="text"
-                    placeholder="Enter username"
-                    autocomplete="off"
-                >
-
-                <button id="joinButton">
-                    Join Chat
-                </button>
-            </div>
-
-        </section>
-
-        <footer>
-            <span>Built with Node.js</span>
-            <span>•</span>
-            <span>No frameworks</span>
-            <span>•</span>
-            <span>No libraries</span>
-        </footer>
-
-    </main>
-
-    <script src="/app.js"></script>
+    function sendGroup() {
+      const groupId = document.getElementById('groupId').value;
+      const content = document.getElementById('groupContent').value;
+      ws.send(JSON.stringify({
+        action: 'send_group_message',
+        data: { groupId, content }
+      }));
+    }
+  </script>
 </body>
 </html>
