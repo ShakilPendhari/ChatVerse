@@ -42,10 +42,10 @@ function callWebsocket() {
         // ws.send("A");
 
         // // 2 byte payload
-        // ws.send("AB")
+        ws.send("AB")
 
         // 126 byte payload
-        ws.send("A".repeat(700000))
+        // ws.send("A".repeat(700000))
 
         //
         // ws.send("A".repeat(65537))
