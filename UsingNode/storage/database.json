@@ -1,0 +1,21 @@
+{
+  "users": [
+    {
+      "id": "user_101",
+      "name": "Shakil",
+      "email": "shakil@example.com"
+    },
+    {
+      "id": "user_202",
+      "name": "Rahul",
+      "email": "rahul@example.com"
+    },
+    {
+      "id": "user_303",
+      "name": "Amit",
+      "email": "amit@example.com"
+    }
+  ],
+  "conversations": [],
+  "messages": []
+}
