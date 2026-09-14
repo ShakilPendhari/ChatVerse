@@ -6,8 +6,6 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
     // TCP is a stream.
     // One TCP chunk != one WebSocket frame.
 
-    console.log("byte2")
-
     accumulatedBuffer = Buffer.concat([
         accumulatedBuffer,
         chunk,
@@ -23,7 +21,7 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
         // Byte 1
         // ------------------------------------------
         const byte1 = accumulatedBuffer[0];
-        const { opcode } = getByte1(byte1,)
+        const { fin, opcode } = getByte1(byte1,)
 
         // ------------------------------------------
         // Byte 2
@@ -184,10 +182,11 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 break;
 
             case 0x2:
-                // Binary frame
-                console.log(
-                    "Binary frame received"
-                );
+                console.log("Binary frame received");
+
+                console.log("FIN:", fin);
+                console.log("Payload Length:", payloadLength);
+                console.log("Payload:", unmaskedPayload);
 
                 break;
 
@@ -244,11 +243,11 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
             accumulatedBuffer.subarray(
                 totalFrameSize
             );
-        const response = "A".repeat(900000)
-        // --- Example Usage ---
-        const frameBuffer = createWebSocketFrame(response);
-        // Send `frameBuffer` directly over your TCP socket stream (e.g., socket.write(frameBuffer))
-        socket.write(frameBuffer)
+        // const response = "A".repeat(900000)
+        // // --- Example Usage ---
+        // const frameBuffer = createWebSocketFrame(response);
+        // // Send `frameBuffer` directly over your TCP socket stream (e.g., socket.write(frameBuffer))
+        // socket.write(frameBuffer)
     }
 }
 
