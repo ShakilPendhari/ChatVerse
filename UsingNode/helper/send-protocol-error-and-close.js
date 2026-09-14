@@ -14,3 +14,5 @@ function sendProtocolErrorAndClose(socket) {
         socket.end();
     });
 }
+
+module.exports = sendProtocolErrorAndClose

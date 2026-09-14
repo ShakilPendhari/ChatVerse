@@ -1,33 +1,68 @@
 const getByte1 = require("./bytes/byte1");
-const getByte2 = require("./bytes/byte2");
-const createWebSocketFrame = require("./frame-writer")
 
-function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
+const getByte2 = require("./bytes/byte2");
+
+const createWebSocketFrame = require("./frame-writer");
+
+// ==========================================
+// SEND PROTOCOL ERROR AND CLOSE
+// ==========================================
+const sendProtocolErrorAndClose = require("./../helper/send-protocol-error-and-close")
+
+
+// ==========================================
+// WEBSOCKET FRAME PARSER
+// ==========================================
+
+function getWebSocketFrameAndParse(
+    accumulatedBuffer,
+    socket,
+    chunk,
+    fragmentedMessage
+) {
+    // ==========================================
+    // TCP BUFFER
+    // ==========================================
+
     // TCP is a stream.
     // One TCP chunk != one WebSocket frame.
+    accumulatedBuffer =
+        Buffer.concat([
+            accumulatedBuffer,
+            chunk,
+        ]);
 
-    accumulatedBuffer = Buffer.concat([
-        accumulatedBuffer,
-        chunk,
-    ]);
+    // ==========================================
+    // PROCESS COMPLETE FRAMES
+    // ==========================================
 
-    // ------------------------------------------
-    // Process all complete frames currently
-    // available inside the buffer.
-    // ------------------------------------------
+    while (
+        accumulatedBuffer.length >= 2
+    ) {
+        // ==========================================
+        // BYTE 1
+        // ==========================================
 
-    while (accumulatedBuffer.length >= 2) {
-        // ------------------------------------------
-        // Byte 1
-        // ------------------------------------------
-        const byte1 = accumulatedBuffer[0];
-        const { fin, opcode, rsv1, rsv2, rsv3 } = getByte1(byte1,)
+        const byte1 =
+            accumulatedBuffer[0];
+
+        const {
+            fin,
+            opcode,
+            rsv1,
+            rsv2,
+            rsv3,
+        } = getByte1(byte1);
 
         // ==========================================
         // RSV BIT VALIDATION
         // ==========================================
 
-        if (rsv1 || rsv2 || rsv3) {
+        if (
+            rsv1 ||
+            rsv2 ||
+            rsv3
+        ) {
             console.log(
                 "Protocol error: RSV bit set"
             );
@@ -47,94 +82,97 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 rsv3
             );
 
-            // Close code 1002 = Protocol Error
-            const closePayload = Buffer.alloc(2);
-
-            closePayload.writeUInt16BE(
-                1002,
-                0
+            sendProtocolErrorAndClose(
+                socket
             );
 
-            const closeFrame =
-                createWebSocketFrame(
-                    closePayload,
-                    0x8,
-                    true
-                );
-
-            socket.write(
-                closeFrame,
-                () => {
-                    socket.end();
-                }
-            );
-
-            break;
+            return {
+                accumulatedBuffer,
+                fragmentedMessage,
+            };
         }
 
-        // ------------------------------------------
-        // Byte 2
-        // ------------------------------------------
-        const byte2 = accumulatedBuffer[1];
+        // ==========================================
+        // BYTE 2
+        // ==========================================
+
+        const byte2 =
+            accumulatedBuffer[1];
+
         const {
             isMasked,
             payloadLengthInfo,
         } = getByte2(byte2);
 
+        // ==========================================
+        // MASK VALIDATION
+        // ==========================================
+
+        // Client -> Server frames MUST be masked.
         if (!isMasked) {
             console.log(
                 "Protocol error: client frame is not masked"
             );
 
-            const closePayload =
-                Buffer.alloc(2);
-
-            closePayload.writeUInt16BE(
-                1002,
-                0
+            sendProtocolErrorAndClose(
+                socket
             );
 
-            const closeFrame =
-                createWebSocketFrame(
-                    closePayload,
-                    0x8,
-                    true
-                );
-
-            socket.write(
-                closeFrame,
-                () => {
-                    socket.end();
-                }
-            );
-
-            return;
+            return {
+                accumulatedBuffer,
+                fragmentedMessage,
+            };
         }
 
-        // ------------------------------------------
-        // 5. Determine header size
-        // ------------------------------------------
+        // ==========================================
+        // DETERMINE HEADER SIZE
+        // ==========================================
 
         let payloadLength;
         let maskingKeyOffset;
         let payloadOffset;
 
-        if (payloadLengthInfo <= 125) {
+        // ------------------------------------------
+        // Payload length: 0 - 125
+        // ------------------------------------------
 
-            if (accumulatedBuffer.length < 6) {
+        if (
+            payloadLengthInfo <= 125
+        ) {
+            // Need:
+            // 2 bytes base header
+            // 4 bytes masking key
+
+            if (
+                accumulatedBuffer.length < 6
+            ) {
+                // Frame header is incomplete.
                 break;
             }
-            payloadLength = payloadLengthInfo;
+
+            payloadLength =
+                payloadLengthInfo;
 
             maskingKeyOffset = 2;
             payloadOffset = 6;
-        } else if (payloadLengthInfo === 126) {
+        }
+
+        // ------------------------------------------
+        // Payload length: 126
+        // ------------------------------------------
+
+        else if (
+            payloadLengthInfo === 126
+        ) {
             // Need:
             // 2 bytes base header
             // 2 bytes extended length
             // 4 bytes masking key
 
-            if (accumulatedBuffer.length < 8) {
+            if (
+                accumulatedBuffer.length < 8
+            ) {
+                // Extended length + mask not complete.
                 break;
             }
 
@@ -143,15 +181,22 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
 
             maskingKeyOffset = 4;
             payloadOffset = 8;
-        } else {
-            // payloadLengthInfo === 127
-            //
+        }
+
+        // ------------------------------------------
+        // Payload length: 127
+        // ------------------------------------------
+
+        else {
             // Need:
             // 2 bytes base header
             // 8 bytes extended length
             // 4 bytes masking key
 
-            if (accumulatedBuffer.length < 14) {
+            if (
+                accumulatedBuffer.length < 14
+            ) {
+                // Extended length + mask not complete.
                 break;
             }
 
@@ -170,21 +215,27 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 );
 
                 socket.destroy();
-                return;
+
+                return {
+                    accumulatedBuffer,
+                    fragmentedMessage,
+                };
             }
 
-            payloadLength = Number(payloadLengthBigInt);
+            payloadLength =
+                Number(payloadLengthBigInt);
 
             maskingKeyOffset = 10;
             payloadOffset = 14;
         }
 
-        // ------------------------------------------
-        // 6. Check whether complete frame arrived
-        // ------------------------------------------
+        // ==========================================
+        // CHECK COMPLETE FRAME
+        // ==========================================
 
         const totalFrameSize =
-            payloadOffset + payloadLength;
+            payloadOffset +
+            payloadLength;
 
         if (
             accumulatedBuffer.length <
@@ -195,9 +246,9 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
             break;
         }
 
-        // ------------------------------------------
-        // 7. Extract masking key
-        // ------------------------------------------
+        // ==========================================
+        // EXTRACT MASKING KEY
+        // ==========================================
 
         const maskingKey =
             accumulatedBuffer.subarray(
@@ -205,9 +256,9 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 maskingKeyOffset + 4
             );
 
-        // ------------------------------------------
-        // 8. Extract masked payload
-        // ------------------------------------------
+        // ==========================================
+        // EXTRACT MASKED PAYLOAD
+        // ==========================================
 
         const maskedPayload =
             accumulatedBuffer.subarray(
@@ -215,22 +266,26 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 totalFrameSize
             );
 
-        // ------------------------------------------
-        // 9. Unmask payload
-        // ------------------------------------------
+        // ==========================================
+        // UNMASK PAYLOAD
+        // ==========================================
 
         const unmaskedPayload =
             Buffer.alloc(payloadLength);
 
-        for (let i = 0; i < payloadLength; i++) {
+        for (
+            let i = 0;
+            i < payloadLength;
+            i++
+        ) {
             unmaskedPayload[i] =
                 maskedPayload[i] ^
                 maskingKey[i % 4];
         }
 
-        // ------------------------------------------
-        // 10 Handle opcode (OPCODE VALIDATION)
-        // ------------------------------------------
+        // ==========================================
+        // OPCODE VALIDATION
+        // ==========================================
 
         const isValidOpcode =
             opcode === 0x0 || // Continuation
@@ -246,31 +301,15 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 `0x${opcode.toString(16)}`
             );
 
-            // Close code 1002 = Protocol Error
-            const closePayload = Buffer.alloc(2);
-
-            closePayload.writeUInt16BE(
-                1002,
-                0
+            sendProtocolErrorAndClose(
+                socket
             );
 
-            const closeFrame =
-                createWebSocketFrame(
-                    closePayload,
-                    0x8,
-                    true
-                );
-
-            socket.write(
-                closeFrame,
-                () => {
-                    socket.end();
-                }
-            );
-
-            break;
+            return {
+                accumulatedBuffer,
+                fragmentedMessage,
+            };
         }
-
 
         // ==========================================
         // CONTROL FRAME VALIDATION
@@ -282,64 +321,44 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
             opcode === 0xA;
 
         if (isControlFrame) {
-            // Control frames must never be fragmented.
+            // --------------------------------------
+            // Control frames MUST have FIN=1
+            // --------------------------------------
+
             if (!fin) {
                 console.log(
                     "Protocol error: control frame must have FIN=1"
                 );
 
-                const closePayload = Buffer.alloc(2);
-
-                closePayload.writeUInt16BE(
-                    1002,
-                    0
+                sendProtocolErrorAndClose(
+                    socket
                 );
 
-                const closeFrame =
-                    createWebSocketFrame(
-                        closePayload,
-                        0x8,
-                        true
-                    );
-
-                socket.write(
-                    closeFrame,
-                    () => {
-                        socket.end();
-                    }
-                );
-
-                break;
+                return {
+                    accumulatedBuffer,
+                    fragmentedMessage,
+                };
             }
 
-            // Control frames cannot have payload > 125 bytes.
-            if (payloadLength > 125) {
+            // --------------------------------------
+            // Control frame payload <= 125 bytes
+            // --------------------------------------
+
+            if (
+                payloadLength > 125
+            ) {
                 console.log(
                     "Protocol error: control frame payload too large"
                 );
 
-                const closePayload = Buffer.alloc(2);
-
-                closePayload.writeUInt16BE(
-                    1002,
-                    0
+                sendProtocolErrorAndClose(
+                    socket
                 );
 
-                const closeFrame =
-                    createWebSocketFrame(
-                        closePayload,
-                        0x8,
-                        true
-                    );
-
-                socket.write(
-                    closeFrame,
-                    () => {
-                        socket.end();
-                    }
-                );
-
-                break;
+                return {
+                    accumulatedBuffer,
+                    fragmentedMessage,
+                };
             }
         }
 
@@ -348,18 +367,135 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
         // ==========================================
 
         switch (opcode) {
-            case 0x0:
-                // Continuation frame
+
+            // ======================================
+            // CONTINUATION FRAME
+            // ======================================
+
+            case 0x0: {
                 console.log(
                     "Continuation frame"
                 );
-                break;
 
-            case 0x1:
-                // Text frame
+                // Continuation is only valid when
+                // a fragmented message is active.
+                if (!fragmentedMessage) {
+                    console.log(
+                        "Protocol error: unexpected continuation frame"
+                    );
+
+                    sendProtocolErrorAndClose(
+                        socket
+                    );
+
+                    return {
+                        accumulatedBuffer,
+                        fragmentedMessage,
+                    };
+                }
+
+                // Add this fragment.
+                fragmentedMessage.payloads.push(
+                    unmaskedPayload
+                );
+
+                // ----------------------------------
+                // Final continuation
+                // ----------------------------------
+
+                if (fin) {
+                    const completePayload =
+                        Buffer.concat(
+                            fragmentedMessage.payloads
+                        );
+
+                    console.log(
+                        "Fragmented message complete"
+                    );
+
+                    console.log(
+                        "Opcode:",
+                        fragmentedMessage.opcode
+                    );
+
+                    // Original message was Text.
+                    if (
+                        fragmentedMessage.opcode === 0x1
+                    ) {
+                        console.log(
+                            "Decoded Message:",
+                            completePayload.toString(
+                                "utf8"
+                            )
+                        );
+                    }
+
+                    // Original message was Binary.
+                    if (
+                        fragmentedMessage.opcode === 0x2
+                    ) {
+                        console.log(
+                            "Binary Payload:",
+                            completePayload
+                        );
+                    }
+
+                    // Fragmentation is complete.
+                    fragmentedMessage = null;
+                }
+
+                break;
+            }
+
+            // ======================================
+            // TEXT FRAME
+            // ======================================
+
+            case 0x1: {
                 console.log(
                     "Text frame received"
                 );
+
+                // A new Text frame cannot start
+                // while another fragmented message
+                // is active.
+                if (fragmentedMessage) {
+                    console.log(
+                        "Protocol error: new text frame while fragmented message is active"
+                    );
+
+                    sendProtocolErrorAndClose(
+                        socket
+                    );
+
+                    return {
+                        accumulatedBuffer,
+                        fragmentedMessage,
+                    };
+                }
+
+                // ----------------------------------
+                // Start fragmented text message
+                // ----------------------------------
+
+                if (!fin) {
+                    fragmentedMessage = {
+                        opcode: 0x1,
+                        payloads: [
+                            unmaskedPayload,
+                        ],
+                    };
+
+                    console.log(
+                        "Started fragmented text message"
+                    );
+
+                    break;
+                }
+
+                // ----------------------------------
+                // Complete text message
+                // ----------------------------------
 
                 console.log(
                     "FIN:",
@@ -373,16 +509,63 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
 
                 console.log(
                     "Decoded Message:",
-                    unmaskedPayload.toString("utf8")
+                    unmaskedPayload.toString(
+                        "utf8"
+                    )
                 );
 
                 break;
+            }
 
-            case 0x2:
-                // Binary frame
+            // ======================================
+            // BINARY FRAME
+            // ======================================
+
+            case 0x2: {
                 console.log(
                     "Binary frame received"
                 );
+
+                // A new Binary frame cannot start
+                // while another fragmented message
+                // is active.
+                if (fragmentedMessage) {
+                    console.log(
+                        "Protocol error: new binary frame while fragmented message is active"
+                    );
+
+                    sendProtocolErrorAndClose(
+                        socket
+                    );
+
+                    return {
+                        accumulatedBuffer,
+                        fragmentedMessage,
+                    };
+                }
+
+                // ----------------------------------
+                // Start fragmented binary message
+                // ----------------------------------
+
+                if (!fin) {
+                    fragmentedMessage = {
+                        opcode: 0x2,
+                        payloads: [
+                            unmaskedPayload,
+                        ],
+                    };
+
+                    console.log(
+                        "Started fragmented binary message"
+                    );
+
+                    break;
+                }
+
+                // ----------------------------------
+                // Complete binary message
+                // ----------------------------------
 
                 console.log(
                     "FIN:",
@@ -400,28 +583,45 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 );
 
                 break;
+            }
 
-            case 0x8:
-                // Close frame
+            // ======================================
+            // CLOSE FRAME
+            // ======================================
+
+            case 0x8: {
                 console.log(
                     "Close frame received"
                 );
 
-                // A close frame may contain:
-                // 0 bytes → no status code
-                // 2+ bytes → status code + optional reason
-                if (unmaskedPayload.length === 1) {
+                // A Close frame may contain:
+                //
+                // 0 bytes
+                //     -> no status code
+                //
+                // 2+ bytes
+                //     -> status code + optional reason
+                //
+                // 1 byte
+                //     -> invalid
+
+                if (
+                    unmaskedPayload.length === 1
+                ) {
                     console.log(
                         "Invalid close frame payload"
                     );
 
                     socket.end();
+
                     break;
                 }
 
                 let closeCode = null;
 
-                if (unmaskedPayload.length >= 2) {
+                if (
+                    unmaskedPayload.length >= 2
+                ) {
                     closeCode =
                         unmaskedPayload.readUInt16BE(0);
 
@@ -447,13 +647,19 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 );
 
                 break;
+            }
 
-            case 0x9:
-                // Ping
+            // ======================================
+            // PING
+            // ======================================
+
+            case 0x9: {
                 console.log(
                     "Ping frame received"
                 );
 
+                // Pong must contain the same
+                // application data as Ping.
                 const pongFrame =
                     createWebSocketFrame(
                         unmaskedPayload,
@@ -466,34 +672,40 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 );
 
                 break;
+            }
 
-            case 0xA:
-                // Pong
+            // ======================================
+            // PONG
+            // ======================================
+
+            case 0xA: {
                 console.log(
                     "Pong frame received"
                 );
 
                 break;
+            }
         }
 
-
-        // ------------------------------------------
-        // 11. Remove processed frame from buffer
-        // ------------------------------------------
+        // ==========================================
+        // REMOVE PROCESSED FRAME
+        // ==========================================
 
         accumulatedBuffer =
             accumulatedBuffer.subarray(
                 totalFrameSize
             );
-        // const response = "A".repeat(900000)
-        // // --- Example Usage ---
-        // const frameBuffer = createWebSocketFrame(response);
-        // // Send `frameBuffer` directly over your TCP socket stream (e.g., socket.write(frameBuffer))
-        // socket.write(frameBuffer)
     }
+
+    // ==========================================
+    // RETURN CONNECTION STATE
+    // ==========================================
+
+    return {
+        accumulatedBuffer,
+        fragmentedMessage,
+    };
 }
 
-module.exports = getWebSocketFrameAndParse
-
-
-
+module.exports =
+    getWebSocketFrameAndParse;
