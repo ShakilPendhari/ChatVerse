@@ -1,5 +1,5 @@
 function createWebSocketFrame(textPayload, opcode = 0x1, isFin = true) {
-    const payloadBuffer = Buffer.from(textPayload, 'utf-8');
+    const payloadBuffer = Buffer.isBuffer(textPayload) ? textPayload : Buffer.from(textPayload, 'utf-8');
     const payloadLen = payloadBuffer.length;
 
     // 1. Calculate Header Length

@@ -6,6 +6,8 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
     // TCP is a stream.
     // One TCP chunk != one WebSocket frame.
 
+    console.log("byte2")
+
     accumulatedBuffer = Buffer.concat([
         accumulatedBuffer,
         chunk,
@@ -21,7 +23,7 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
         // Byte 1
         // ------------------------------------------
         const byte1 = accumulatedBuffer[0];
-        getByte1(byte1)
+        getByte1(byte1,)
 
         // ------------------------------------------
         // Byte 2
@@ -38,6 +40,10 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
         let payloadOffset;
 
         if (payloadLengthInfo <= 125) {
+
+            if (accumulatedBuffer.length < 6) {
+                break;
+            }
             payloadLength = payloadLengthInfo;
 
             maskingKeyOffset = 2;
@@ -142,6 +148,93 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 maskingKey[i % 4];
         }
 
+        // ------------------------------------------
+        // 10 Handle opcode
+        // ------------------------------------------
+
+        switch (opcode) {
+            case 0x0:
+                // Continuation frame
+                console.log(
+                    "Continuation frame"
+                );
+                break;
+
+            case 0x1:
+                // Text frame
+                console.log(
+                    "Text frame received"
+                );
+
+                console.log(
+                    "FIN:",
+                    fin
+                );
+
+                console.log(
+                    "Payload Length:",
+                    payloadLength
+                );
+
+                console.log(
+                    "Decoded Message:",
+                    unmaskedPayload.toString("utf8")
+                );
+
+                break;
+
+            case 0x2:
+                // Binary frame
+                console.log(
+                    "Binary frame received"
+                );
+
+                break;
+
+            case 0x8:
+                // Close frame
+                console.log(
+                    "Close frame received"
+                );
+
+                socket.end();
+                return;
+
+            case 0x9:
+                // Ping
+                console.log(
+                    "Ping frame received"
+                );
+                const pongFrame = createWebSocketFrame(unmaskedPayload, 0x0A, 1)
+                // (opcode & 0x0f)
+                //   00001010
+                // & 00001111
+                //   00001010
+
+                // finBit | (opcode & 0x0f);
+                //   10000000
+                // | 00001010
+                //   10001010
+
+                socket.write(pongFrame)
+
+                break;
+
+            case 0xA:
+                // Pong
+                console.log(
+                    "Pong frame received"
+                );
+
+                break;
+
+            default:
+                console.log(
+                    "Unknown opcode:",
+                    opcode
+                );
+        }
+
 
         // ------------------------------------------
         // 11. Remove processed frame from buffer
@@ -160,3 +253,6 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
 }
 
 module.exports = getWebSocketFrameAndParse
+
+
+
