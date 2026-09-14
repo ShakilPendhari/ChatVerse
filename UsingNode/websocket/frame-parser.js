@@ -23,7 +23,7 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
         // Byte 1
         // ------------------------------------------
         const byte1 = accumulatedBuffer[0];
-        getByte1(byte1,)
+        const { opcode } = getByte1(byte1,)
 
         // ------------------------------------------
         // Byte 2

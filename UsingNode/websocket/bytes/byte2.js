@@ -20,3 +20,5 @@ function getByte2(byte2) {
 
     return { isMasked, payloadLengthInfo }
 }
+
+module.exports = getByte2
