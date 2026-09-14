@@ -8,45 +8,69 @@ const {
     testPingPong,
     testPong,
     testClose,
+    testUnmaskedClientFrame,
+    testRSVBit,
+    testReservedOpcode,
+    testFragmentedControlFrame,
     testFragmentedText,
 } = require("./websocket/test-cases");
 
 async function main() {
-    const client =
-        new WebSocketTestClient({
-            host: "127.0.0.1",
-            port: 8000,
-            path: "/",
-        });
-
     try {
-        console.log(
-            "Connecting to WebSocket server..."
+        await runTest(
+            "Ping → Pong",
+            testPingPong
         );
 
-        await client.connect();
-
-        console.log(
-            "WebSocket handshake successful"
+        await runTest(
+            "Text frame",
+            testText
         );
 
-        await testPingPong(client);
+        await runTest(
+            "Binary frame",
+            testBinary
+        );
 
-        await testText(client);
+        await runTest(
+            "Pong frame",
+            testPong
+        );
 
-        await testBinary(client);
+        await runTest(
+            "RSV bit",
+            testRSVBit
+        );
 
-        await testPong(client);
+        await runTest(
+            "Fragmented control frame",
+            testFragmentedControlFrame
+        );
 
-        // Don't run these yet if your server
-        // doesn't implement them completely.
-        //
-        // await testClose(client);
-        // await testFragmentedText(client);
+        await runTest(
+            "Reserved opcode",
+            testReservedOpcode
+        );
+
+        await runTest(
+            "Unmasked client frame",
+            testUnmaskedClientFrame
+        );
+
+        await runTest(
+            "Close frame",
+            testClose
+        );
+
+        await runTest(
+            "Fragmented text",
+            testFragmentedText
+        );
 
         console.log(
             "\nAll enabled tests passed."
         );
+
     } catch (error) {
         console.error(
             "\nTEST FAILED:"
@@ -57,6 +81,30 @@ async function main() {
         );
 
         process.exitCode = 1;
+    }
+}
+
+async function runTest(testName, testFunction) {
+    const client =
+        new WebSocketTestClient({
+            host: "127.0.0.1",
+            port: 8000,
+            path: "/",
+        });
+
+    try {
+        console.log(
+            `\nConnecting for: ${testName}`
+        );
+
+        await client.connect();
+
+        console.log(
+            "WebSocket handshake successful"
+        );
+
+        await testFunction(client);
+
     } finally {
         client.close();
     }

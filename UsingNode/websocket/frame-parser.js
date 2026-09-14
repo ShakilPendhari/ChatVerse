@@ -21,13 +21,95 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
         // Byte 1
         // ------------------------------------------
         const byte1 = accumulatedBuffer[0];
-        const { fin, opcode } = getByte1(byte1,)
+        const { fin, opcode, rsv1, rsv2, rsv3 } = getByte1(byte1,)
+
+        // ==========================================
+        // RSV BIT VALIDATION
+        // ==========================================
+
+        if (rsv1 || rsv2 || rsv3) {
+            console.log(
+                "Protocol error: RSV bit set"
+            );
+
+            console.log(
+                "RSV1:",
+                rsv1
+            );
+
+            console.log(
+                "RSV2:",
+                rsv2
+            );
+
+            console.log(
+                "RSV3:",
+                rsv3
+            );
+
+            // Close code 1002 = Protocol Error
+            const closePayload = Buffer.alloc(2);
+
+            closePayload.writeUInt16BE(
+                1002,
+                0
+            );
+
+            const closeFrame =
+                createWebSocketFrame(
+                    closePayload,
+                    0x8,
+                    true
+                );
+
+            socket.write(
+                closeFrame,
+                () => {
+                    socket.end();
+                }
+            );
+
+            break;
+        }
 
         // ------------------------------------------
         // Byte 2
         // ------------------------------------------
         const byte2 = accumulatedBuffer[1];
-        const { payloadLengthInfo } = getByte2(byte2)
+        const {
+            isMasked,
+            payloadLengthInfo,
+        } = getByte2(byte2);
+
+        if (!isMasked) {
+            console.log(
+                "Protocol error: client frame is not masked"
+            );
+
+            const closePayload =
+                Buffer.alloc(2);
+
+            closePayload.writeUInt16BE(
+                1002,
+                0
+            );
+
+            const closeFrame =
+                createWebSocketFrame(
+                    closePayload,
+                    0x8,
+                    true
+                );
+
+            socket.write(
+                closeFrame,
+                () => {
+                    socket.end();
+                }
+            );
+
+            return;
+        }
 
         // ------------------------------------------
         // 5. Determine header size
@@ -147,8 +229,123 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
         }
 
         // ------------------------------------------
-        // 10 Handle opcode
+        // 10 Handle opcode (OPCODE VALIDATION)
         // ------------------------------------------
+
+        const isValidOpcode =
+            opcode === 0x0 || // Continuation
+            opcode === 0x1 || // Text
+            opcode === 0x2 || // Binary
+            opcode === 0x8 || // Close
+            opcode === 0x9 || // Ping
+            opcode === 0xA;   // Pong
+
+        if (!isValidOpcode) {
+            console.log(
+                "Protocol error: reserved opcode:",
+                `0x${opcode.toString(16)}`
+            );
+
+            // Close code 1002 = Protocol Error
+            const closePayload = Buffer.alloc(2);
+
+            closePayload.writeUInt16BE(
+                1002,
+                0
+            );
+
+            const closeFrame =
+                createWebSocketFrame(
+                    closePayload,
+                    0x8,
+                    true
+                );
+
+            socket.write(
+                closeFrame,
+                () => {
+                    socket.end();
+                }
+            );
+
+            break;
+        }
+
+
+        // ==========================================
+        // CONTROL FRAME VALIDATION
+        // ==========================================
+
+        const isControlFrame =
+            opcode === 0x8 ||
+            opcode === 0x9 ||
+            opcode === 0xA;
+
+        if (isControlFrame) {
+            // Control frames must never be fragmented.
+            if (!fin) {
+                console.log(
+                    "Protocol error: control frame must have FIN=1"
+                );
+
+                const closePayload = Buffer.alloc(2);
+
+                closePayload.writeUInt16BE(
+                    1002,
+                    0
+                );
+
+                const closeFrame =
+                    createWebSocketFrame(
+                        closePayload,
+                        0x8,
+                        true
+                    );
+
+                socket.write(
+                    closeFrame,
+                    () => {
+                        socket.end();
+                    }
+                );
+
+                break;
+            }
+
+            // Control frames cannot have payload > 125 bytes.
+            if (payloadLength > 125) {
+                console.log(
+                    "Protocol error: control frame payload too large"
+                );
+
+                const closePayload = Buffer.alloc(2);
+
+                closePayload.writeUInt16BE(
+                    1002,
+                    0
+                );
+
+                const closeFrame =
+                    createWebSocketFrame(
+                        closePayload,
+                        0x8,
+                        true
+                    );
+
+                socket.write(
+                    closeFrame,
+                    () => {
+                        socket.end();
+                    }
+                );
+
+                break;
+            }
+        }
+
+        // ==========================================
+        // OPCODE HANDLING
+        // ==========================================
 
         switch (opcode) {
             case 0x0:
@@ -182,11 +379,25 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 break;
 
             case 0x2:
-                console.log("Binary frame received");
+                // Binary frame
+                console.log(
+                    "Binary frame received"
+                );
 
-                console.log("FIN:", fin);
-                console.log("Payload Length:", payloadLength);
-                console.log("Payload:", unmaskedPayload);
+                console.log(
+                    "FIN:",
+                    fin
+                );
+
+                console.log(
+                    "Payload Length:",
+                    payloadLength
+                );
+
+                console.log(
+                    "Payload:",
+                    unmaskedPayload
+                );
 
                 break;
 
@@ -196,26 +407,63 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                     "Close frame received"
                 );
 
-                socket.end();
-                return;
+                // A close frame may contain:
+                // 0 bytes → no status code
+                // 2+ bytes → status code + optional reason
+                if (unmaskedPayload.length === 1) {
+                    console.log(
+                        "Invalid close frame payload"
+                    );
+
+                    socket.end();
+                    break;
+                }
+
+                let closeCode = null;
+
+                if (unmaskedPayload.length >= 2) {
+                    closeCode =
+                        unmaskedPayload.readUInt16BE(0);
+
+                    console.log(
+                        "Close code:",
+                        closeCode
+                    );
+                }
+
+                // Send Close response.
+                const closeFrame =
+                    createWebSocketFrame(
+                        unmaskedPayload,
+                        0x8,
+                        true
+                    );
+
+                socket.write(
+                    closeFrame,
+                    () => {
+                        socket.end();
+                    }
+                );
+
+                break;
 
             case 0x9:
                 // Ping
                 console.log(
                     "Ping frame received"
                 );
-                const pongFrame = createWebSocketFrame(unmaskedPayload, 0x0A, 1)
-                // (opcode & 0x0f)
-                //   00001010
-                // & 00001111
-                //   00001010
 
-                // finBit | (opcode & 0x0f);
-                //   10000000
-                // | 00001010
-                //   10001010
+                const pongFrame =
+                    createWebSocketFrame(
+                        unmaskedPayload,
+                        0x0A,
+                        true
+                    );
 
-                socket.write(pongFrame)
+                socket.write(
+                    pongFrame
+                );
 
                 break;
 
@@ -226,12 +474,6 @@ function getWebSocketFrameAndParse(accumulatedBuffer, socket, chunk) {
                 );
 
                 break;
-
-            default:
-                console.log(
-                    "Unknown opcode:",
-                    opcode
-                );
         }
 
 
