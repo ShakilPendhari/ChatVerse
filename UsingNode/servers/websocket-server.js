@@ -48,6 +48,8 @@ server.on("upgrade", (req, socket, head) => {
 
         fragmentedMessage =
             result.fragmentedMessage;
+
+        console.log("accumu",accumulatedBuffer, "frag", fragmentedMessage)
     });
 
     // ==========================================
